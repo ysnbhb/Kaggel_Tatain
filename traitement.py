@@ -74,7 +74,7 @@ def candidate_models():
 
 def main():
     print("Loading data...")
-    data = pd.read_csv("titanic./train.csv")
+    data = pd.read_csv("titanic/train.csv")
     X = data.drop(columns="Survived")
     y = data["Survived"]
 
@@ -118,7 +118,7 @@ def main():
 
 
     print("Loading test data...")
-    test = pd.read_csv("titanic./test.csv")
+    test = pd.read_csv("titanic/test.csv")
 
     print("Engineering features...")
     X_test = add_features(test)
