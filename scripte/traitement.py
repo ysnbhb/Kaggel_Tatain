@@ -3,7 +3,7 @@ import pandas as pd
 
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier , ExtraTreesClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -15,56 +15,98 @@ from preprocessing_feature import add_features
 
 def candidate_models():
     return [
-        # Logistic Regression
+ 
+        # ── Logistic Regression ─────────────────────────────────────────────
+        # solver="saga" supports all penalties including elasticnet
+        # class_weight="balanced" handles 60/40 Titanic imbalance
         (
             "logreg",
-            LogisticRegression(max_iter=2000, solver="liblinear"),
+            LogisticRegression(
+                max_iter=2000,
+                solver="saga",
+                class_weight="balanced",
+                random_state=42,
+            ),
             {
-                "model__C": [0.001, 0.01, 0.1, 1.0, 10, 100],
-                "model__penalty": ["l1", "l2"],
+                "model__C":        [0.01, 0.1, 1.0, 10],
+                "model__penalty":  ["l1", "l2"],
             },
         ),
-        # KNN
+ 
+        # ── KNN ────────────────────────────────────────────────────────────
+        # Tighter n_neighbors (>11 rarely helps on ~700-row splits)
+        # metric replaces p — manhattan often beats euclidean on mixed features
         (
             "knn",
             KNeighborsClassifier(),
             {
-                "model__n_neighbors": [3, 5, 7, 11, 15, 21],
-                "model__weights": ["uniform", "distance"],
-                "model__p": [1, 2],
+                "model__n_neighbors": [3, 5, 7, 9, 11],
+                "model__weights":     ["uniform", "distance"],
+                "model__metric":      ["euclidean", "manhattan"],
             },
         ),
-        # SVM
+ 
+        # ── SVM ────────────────────────────────────────────────────────────
+        # Dropped poly kernel (degree not tuned = wasteful)
+        # class_weight="balanced" important for imbalanced target
+        # Tighter gamma range focused around "scale"
         (
             "svm",
-            SVC(probability=True),
+            SVC(probability=True, class_weight="balanced", random_state=42),
             {
-                "model__C": [0.1, 1, 10, 100],
-                "model__gamma": ["scale", 0.01, 0.1, 1],
-                "model__kernel": ["rbf", "poly"],
+                "model__C":      [0.1, 1, 10, 50],
+                "model__gamma":  ["scale", 0.01, 0.1],
+                "model__kernel": ["rbf", "sigmoid"],
             },
         ),
-        # Random Forest
         (
             "rf",
-            RandomForestClassifier(random_state=42, n_jobs=-1),
+            RandomForestClassifier(
+                random_state=42,
+                n_jobs=-1,
+                class_weight="balanced_subsample",
+            ),
             {
-                "model__n_estimators": [200, 400, 600],
-                "model__max_depth": [None, 10, 20, 30],
-                "model__min_samples_split": [2, 5, 10],
-                "model__min_samples_leaf": [1, 2, 4],
-                "model__max_features": ["sqrt", "log2"],
+                "model__n_estimators":      [300, 500],
+                "model__max_depth":         [5, 10, 15, 20],
+                "model__min_samples_split": [2, 5],
+                "model__min_samples_leaf":  [1, 2],
+                "model__max_features":      ["sqrt", "log2"],
             },
         ),
-        # Gradient Boosting
+ 
+        # ── Extra Trees ────────────────────────────────────────────────────
+        # NEW — faster than RF, more randomness = less overfit on small data
+        # Often matches or beats RF on Titanic with less tuning
+        (
+            "et",
+            ExtraTreesClassifier(
+                random_state=42,
+                n_jobs=-1,
+                class_weight="balanced_subsample",
+            ),
+            {
+                "model__n_estimators":     [300, 500],
+                "model__max_depth":        [5, 10, 15],
+                "model__min_samples_leaf": [1, 2, 4],
+                "model__max_features":     ["sqrt", "log2"],
+            },
+        ),
+ 
+        # ── Gradient Boosting ──────────────────────────────────────────────
+        # Added min_samples_leaf: prevents overfit on leaf nodes
+        # Added max_features: adds randomness, often boosts generalization
+        # Removed slow combos (n_estimators=300 + lr=0.01)
         (
             "gb",
             GradientBoostingClassifier(random_state=42),
             {
-                "model__n_estimators": [100, 200, 300],
-                "model__learning_rate": [0.01, 0.05, 0.1],
-                "model__max_depth": [3, 5],
-                "model__subsample": [0.8, 1.0],
+                "model__n_estimators":      [100, 200],
+                "model__learning_rate":     [0.05, 0.1, 0.2],
+                "model__max_depth":         [3, 4, 5],
+                "model__subsample":         [0.8, 1.0],
+                "model__min_samples_leaf":  [1, 5, 10],
+                "model__max_features":      ["sqrt", None],
             },
         ),
     ]
@@ -72,7 +114,7 @@ def candidate_models():
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     numeric_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
+    categorical_cols = X.select_dtypes(include=["str"]).columns.tolist()
 
     binary_cols = [c for c in numeric_cols if X[c].nunique() == 2]
     numeric_cols = [c for c in numeric_cols if c not in binary_cols]
