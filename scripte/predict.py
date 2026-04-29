@@ -18,7 +18,7 @@ def main():
 
     print("Saving predictions...")
     out = pd.DataFrame({"PassengerId": X_test["PassengerId"], "Survived": preds})
-    out.to_csv("predictions.csv", index=False)
+    out.to_csv("testpredictions.csv", index=False)
 
     print(f"✅ Predictions saved: testpredictions.csv")
     print(f"   Total predictions: {len(preds)}")
