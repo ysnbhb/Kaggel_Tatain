@@ -66,9 +66,9 @@ def add_features(data):
         (data["Sex"] == "female") | (data["IsChild"] == 1)
     ).astype(int)
 
-    data = data.drop(
-        columns=["Name", "Ticket", "PassengerId", "passenger_type"],
-        errors="ignore",
-    )
+    # data = data.drop(
+    #     columns=["Name", "Ticket", "PassengerId", "passenger_type"],
+    #     errors="ignore",
+    # )
 
     return data
