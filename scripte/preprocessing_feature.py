@@ -3,12 +3,11 @@ import numpy as np
 
 
 def add_features(data):
-    data["Age"].fillna(data["Age"].mean(), inplace=True)
+    data["Age"] = data["Age"].fillna(data["Age"].mean())
 
     data["Age_cut"] = pd.qcut(data["Age"], 8, duplicates="drop")
 
-    data["Cabin"].fillna("O", inplace=True)
-
+    data["Cabin"] = data["Cabin"].fillna("O")
     data["Embarked"] = data["Embarked"].fillna(data["Embarked"].mode()[0])
 
     data["Family_size"] = data["SibSp"] + data["Parch"]
@@ -38,6 +37,6 @@ def add_features(data):
 
     data["passenger_type_grouped"] = data["passenger_type"].replace(title_map)
 
-    data["Fare"].fillna(data["Fare"].mean(), inplace=True)
+    data["Fare"] = data["Fare"].fillna(data["Fare"].mean())
 
     return data

@@ -7,7 +7,7 @@ def main():
     model = joblib.load("bestmodel.pkl")
 
     print("Loading test data...")
-    test = pd.read_csv("titanic./test.csv")
+    test = pd.read_csv("titanic/test.csv")
 
     print("Engineering features...")
     X_test = add_features(test)
