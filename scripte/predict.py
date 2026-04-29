@@ -10,7 +10,7 @@ def main():
     test = pd.read_csv("titanic/test.csv")
 
     print("Engineering features...")
-    X_test = add_features(test , is_train=False)
+    X_test = add_features(test)
     print("value nan ===> ", X_test.isna().sum())
 
     print("Predicting...")
