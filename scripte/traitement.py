@@ -3,7 +3,6 @@ import pandas as pd
 
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
-
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -15,7 +14,6 @@ from preprocessing_feature import add_features
 
 
 def candidate_models():
-
     return [
         # Logistic Regression
         (
@@ -33,7 +31,7 @@ def candidate_models():
             {
                 "model__n_neighbors": [3, 5, 7, 11, 15, 21],
                 "model__weights": ["uniform", "distance"],
-                "model__p": [1, 2],  # Manhattan vs Euclidean
+                "model__p": [1, 2],
             },
         ),
         # SVM
@@ -72,6 +70,24 @@ def candidate_models():
     ]
 
 
+def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
+    numeric_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
+
+    binary_cols = [c for c in numeric_cols if X[c].nunique() == 2]
+    numeric_cols = [c for c in numeric_cols if c not in binary_cols]
+
+    return ColumnTransformer(
+        transformers=[
+            ("num", StandardScaler(), numeric_cols),
+            ("bin", "passthrough", binary_cols),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols),
+        ],
+        remainder="drop",
+        verbose_feature_names_out=False,
+    )
+
+
 def main():
     print("Loading data...")
     data = pd.read_csv("titanic/train.csv")
@@ -80,7 +96,14 @@ def main():
 
     print("\nEngineering features...")
     X = add_features(X)
-    print("value nan ===> ", X.isna().sum())
+
+    missing = X.isna().sum()
+    if missing.any():
+        print("⚠️  Missing values after feature engineering:")
+        print(missing[missing > 0])
+    else:
+        print("✅  No missing values after feature engineering.")
+
     print("\nSplitting data (80/20)...")
     X_train, X_holdout, y_train, y_holdout = train_test_split(
         X,
@@ -92,68 +115,63 @@ def main():
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    best = None
+    best_estimator = None
     best_name = None
-    best_score = -np.inf
+    best_cv_score = -np.inf
+    results = []
 
     print("\n" + "=" * 60)
     print("STARTING GRID SEARCH (5-fold CV)")
     print("=" * 60)
 
-    numeric_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
-
-    binary_cols = [c for c in numeric_cols if X[c].nunique() == 2]
-    numeric_cols = [c for c in numeric_cols if c not in binary_cols]
-
-    pre = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), numeric_cols),
-            ("bin", "passthrough", binary_cols),
-            ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols),
-        ],
-        remainder="drop",
-        verbose_feature_names_out=False,
-    )
-
-
-    print("Loading test data...")
-    test = pd.read_csv("titanic/test.csv")
-
-    print("Engineering features...")
-    X_test = add_features(test)
-
-    
     for name, model, grid in candidate_models():
         print(f"\n[{name.upper()}] Grid search starting...")
+
+        pre = build_preprocessor(X_train)
         pipe = Pipeline([("pre", pre), ("model", model)])
 
-        gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy", n_jobs=-1, verbose=1)
-
+        gs = GridSearchCV(
+            pipe,
+            grid,
+            cv=cv,
+            scoring="accuracy",
+            n_jobs=-1,
+            verbose=1,
+        )
         gs.fit(X_train, y_train)
 
-        print(f"[{name.upper()}] Best CV score: {gs.best_score_:.4f}")
-        print(f"[{name.upper()}] Best params: {gs.best_params_}")
-        
-        print("Predicting...")
-        preds = gs.best_estimator_.predict(X_test)
-        out = pd.DataFrame({"PassengerId": X_test["PassengerId"], "Survived": preds})
-        out.to_csv(f"{name}.csv", index=False)
+        cv_score = gs.best_score_
+        print(f"[{name.upper()}] Best CV score : {cv_score:.4f}")
+        print(f"[{name.upper()}] Best params   : {gs.best_params_}")
 
-        if gs.best_score_ > best_score:
-            best_score = gs.best_score_
-            best = gs.best_estimator_
+        results.append({"model": name, "cv_accuracy": cv_score, "params": gs.best_params_})
+
+        if cv_score > best_cv_score:
+            best_cv_score = cv_score
+            best_estimator = gs.best_estimator_
             best_name = name
 
     print("\n" + "=" * 60)
     print("GRID SEARCH COMPLETE")
     print("=" * 60)
 
-    print(f"\nBest model: {best_name.upper()}")
-    print(f"Best CV accuracy: {best_score:.4f}")
+    print(f"\n🏆 Best model      : {best_name.upper()}")
+    print(f"   Best CV accuracy: {best_cv_score:.4f}")
 
-    print("\nSaving model and results...")
-    joblib.dump(best, "bestmodel.pkl")
+    # Fix #3: evaluate on holdout set that was previously ignored
+    holdout_acc = best_estimator.score(X_holdout, y_holdout)
+    print(f"   Holdout accuracy: {holdout_acc:.4f}")
+
+    # Summary table
+    print("\n── All models summary ──────────────────────────────")
+    summary = pd.DataFrame(results)[["model", "cv_accuracy"]].sort_values(
+        "cv_accuracy", ascending=False
+    )
+    print(summary.to_string(index=False))
+
+    print("\nSaving best model → bestmodel.pkl")
+    joblib.dump(best_estimator, "bestmodel.pkl")
+    print("✅  Done.")
 
 
 if __name__ == "__main__":

@@ -7,10 +7,14 @@ def add_features(data):
 
     data["Age_cut"] = pd.qcut(data["Age"], 8, duplicates="drop")
 
-    data["Cabin"] = data["Cabin"].fillna("O")
+    data["Cabin"] = data["Cabin"].fillna("Unknown")
     data["Embarked"] = data["Embarked"].fillna(data["Embarked"].mode()[0])
 
     data["Family_size"] = data["SibSp"] + data["Parch"]
+    data["IsAlone"] = (data["Family_size"] == 1).astype(int)
+    data["FamilyCategory"] = pd.qcut(
+        data["Family_size"],2 , duplicates="drop"
+    )
 
     htype = data["Name"].str.split(",")
     data["passenger_type"] = htype.apply(lambda x: x[1].split(".")[0].strip())
